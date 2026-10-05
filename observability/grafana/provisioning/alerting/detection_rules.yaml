@@ -1,0 +1,103 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: auth-detections
+    folder: SIEM
+    interval: 1m
+    rules:
+      - uid: brute-force-login
+        title: Force brute sur l'authentification
+        condition: C
+        data:
+          - refId: A
+            queryType: instant
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki
+            model:
+              refId: A
+              queryType: instant
+              expr: |
+                sum by (source_ip) (
+                  count_over_time({service="api"} | json | __error__="" | event_type="auth_failure" [5m])
+                ) >= 5
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: gt
+                    params:
+                      - 0
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        isPaused: false
+        labels:
+          severity: critical
+          detection_rule: brute_force_login
+        annotations:
+          summary: "Force brute depuis {{ $labels.source_ip }}"
+          description: "{{ $values.B.Value }} echecs d'authentification en 5 min depuis {{ $labels.source_ip }}."
+          runbook: "siem/runbooks/brute_force_login.md"
+
+      - uid: credential-stuffing
+        title: Connexions sur plusieurs comptes depuis une meme IP
+        condition: C
+        data:
+          - refId: A
+            queryType: instant
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: loki
+            model:
+              refId: A
+              queryType: instant
+              expr: |
+                count by (source_ip) (
+                  sum by (source_ip, username) (
+                    count_over_time({service="api"} | json | __error__="" | event_type="auth_success" [10m])
+                  )
+                ) >= 3
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: gt
+                    params:
+                      - 0
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        isPaused: false
+        labels:
+          severity: warning
+          detection_rule: multiple_accounts_same_ip
+        annotations:
+          summary: "Credential stuffing probable depuis {{ $labels.source_ip }}"
+          description: "{{ $values.B.Value }} comptes distincts connectes en 10 min depuis {{ $labels.source_ip }}."
+          runbook: "siem/runbooks/multiple_accounts_same_ip.md"

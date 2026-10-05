@@ -1,0 +1,39 @@
+local.file_match "api" {
+  path_targets = [{
+    "__path__" = "/var/log/api/*.log",
+    "service"  = "api",
+  }]
+}
+
+loki.source.file "api" {
+  targets    = local.file_match.api.targets
+  forward_to = [loki.process.api.receiver]
+}
+
+loki.process "api" {
+  forward_to = [loki.write.local.receiver]
+
+  stage.json {
+    expressions = {
+      ts    = "timestamp",
+      level = "severity",
+    }
+  }
+
+  stage.timestamp {
+    source = "ts"
+    format = "RFC3339Nano"
+  }
+
+  stage.labels {
+    values = {
+      level = "",
+    }
+  }
+}
+
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

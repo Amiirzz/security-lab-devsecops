@@ -1,0 +1,5 @@
+count by (source_ip) (
+  sum by (source_ip, username) (
+    count_over_time({service="api"} | json | __error__="" | event_type="auth_success" [24h])
+  )
+)

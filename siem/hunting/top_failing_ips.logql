@@ -1,0 +1,3 @@
+topk(10, sum by (source_ip) (
+  count_over_time({service="api"} | json | __error__="" | event_type="auth_failure" [24h])
+))

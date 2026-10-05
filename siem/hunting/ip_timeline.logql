@@ -1,0 +1,2 @@
+{service="api"} | json | __error__="" | source_ip="172.28.0.66"
+  | line_format "{{.event_type}}  user={{.username}}  resource={{.resource}}"
