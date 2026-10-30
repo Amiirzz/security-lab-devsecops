@@ -39,9 +39,13 @@ Les règles sont dans `siem/detection_rules/`, les runbooks dans `siem/runbooks/
 
 ## Pipeline GitLab CI
 
+[![pipeline status](https://gitlab.com/amir-doudou/security-lab-devsecops/badges/main/pipeline.svg)](https://gitlab.com/amir-doudou/security-lab-devsecops/-/pipelines)
+
 Lint (flake8), tests (pytest), SAST (Bandit), audit des dépendances (pip-audit),
 scan de configuration et d'image (Trivy), puis test de bout en bout qui rejoue
 les attaques et vérifie leur détection.
+
+Le pipeline s'exécute sur GitLab : [voir les pipelines](https://gitlab.com/amir-doudou/security-lab-devsecops/-/pipelines).
 
 ## Stack
 
