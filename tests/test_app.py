@@ -46,11 +46,10 @@ def test_resource_with_valid_token(client):
     assert response.get_json()["owner"] == "amir"
 
 
-def test_login_logs_structured_json(client, capsys):
+def test_login_logs_structured_json(client, caplog):
+    caplog.set_level("INFO", logger="app")
     client.post("/login", json={"username": "amir", "password": "wrong"})
-    captured = capsys.readouterr()
-    log_line = captured.out.strip().splitlines()[-1]
-    record = json.loads(log_line)
+    record = json.loads(caplog.records[-1].getMessage())
     assert record["event_type"] == "auth_failure"
     assert record["username"] == "amir"
 
@@ -60,7 +59,8 @@ def test_unknown_user_is_rejected(client):
     assert response.status_code == 401
 
 
-def test_log_contains_severity(client, capsys):
+def test_log_contains_severity(client, caplog):
+    caplog.set_level("INFO", logger="app")
     client.post("/login", json={"username": "amir", "password": "wrong"})
-    record = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    record = json.loads(caplog.records[-1].getMessage())
     assert record["severity"] == "WARNING"
