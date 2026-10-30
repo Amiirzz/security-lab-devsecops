@@ -1,0 +1,101 @@
+stages:
+  - lint
+  - test
+  - sast
+  - build
+  - scan
+  - e2e
+
+variables:
+  IMAGE_NAME: "security-demo-api"
+  DOCKER_TLS_CERTDIR: "/certs"
+
+lint:
+  stage: lint
+  image: python:3.12-slim
+  script:
+    - pip install --no-cache-dir flake8
+    - flake8 app/ scripts/ tests/ --max-line-length=120
+
+test:
+  stage: test
+  image: python:3.12-slim
+  script:
+    - pip install --no-cache-dir -r app/requirements.txt pytest pyyaml
+    - pytest tests/ -v
+
+sast_bandit:
+  stage: sast
+  image: python:3.12-slim
+  script:
+    - pip install --no-cache-dir bandit
+    - bandit -r app/ scripts/ -f json -o bandit-report.json || true
+    - bandit -r app/ scripts/
+  artifacts:
+    when: always
+    paths:
+      - bandit-report.json
+
+sast_dependency_scan:
+  stage: sast
+  image: python:3.12-slim
+  script:
+    - pip install --no-cache-dir pip-audit
+    - pip-audit -r app/requirements.txt
+
+config_scan:
+  stage: sast
+  image:
+    name: aquasec/trivy:latest
+    entrypoint: [""]
+  script:
+    - trivy config --severity HIGH,CRITICAL --exit-code 1 .
+
+build_image:
+  stage: build
+  image: docker:27
+  services:
+    - docker:27-dind
+  script:
+    - docker build -t "$IMAGE_NAME:$CI_COMMIT_SHORT_SHA" app/
+    - docker save "$IMAGE_NAME:$CI_COMMIT_SHORT_SHA" -o image.tar
+  artifacts:
+    paths:
+      - image.tar
+    expire_in: 1 hour
+
+container_scan:
+  stage: scan
+  image:
+    name: aquasec/trivy:latest
+    entrypoint: [""]
+  needs:
+    - build_image
+  script:
+    - trivy image --input image.tar --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --format table
+
+e2e_detection:
+  stage: e2e
+  image: docker:27
+  services:
+    - docker:27-dind
+  needs:
+    - test
+    - container_scan
+  variables:
+    SIMULATORS: "normal-readonly normal-jdupont normal-amir attacker-bruteforce attacker-stuffing"
+  script:
+    - export GRAFANA_ADMIN_PASSWORD="$(head -c 18 /dev/urandom | base64)"
+    - docker compose up -d --build --wait
+    - docker compose --profile attack up -d --build $SIMULATORS
+    - docker compose --profile attack wait $SIMULATORS
+    - docker compose --profile check run --rm --build detection-check
+  after_script:
+    - export GRAFANA_ADMIN_PASSWORD=unused
+    - docker compose --profile attack logs --no-color > compose-logs.txt 2>&1 || true
+    - docker compose --profile attack --profile check down -v || true
+  artifacts:
+    when: always
+    paths:
+      - compose-logs.txt
+    expire_in: 1 week
